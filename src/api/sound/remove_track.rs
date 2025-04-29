@@ -19,7 +19,7 @@ pub fn remove_track() {
 
     match REQUEST_DATA {
         Get(Some(data)) => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/music_player").await {
+            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
                 Ok(c) => c,
                 Err(e) => {
                     set_header!("Content-Type", "application/json");

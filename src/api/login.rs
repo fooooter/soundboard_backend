@@ -19,7 +19,7 @@ pub fn login() {
 
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
-                    let mut conn = MySqlConnection::connect("mysql://root:@localhost:3306/music_player").await.unwrap();
+                    let mut conn = MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await.unwrap();
 
                     let password_hash = base64::encode_block(&*hash(MessageDigest::sha256(), password.as_bytes()).unwrap());
 

@@ -25,7 +25,7 @@ pub fn list_tracks() {
 
     match REQUEST_DATA {
         Get(_) => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/music_player").await {
+            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
                 Ok(c) => c,
                 Err(e) => {
                     return Some(Vec::from(json!({

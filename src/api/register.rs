@@ -18,7 +18,7 @@ pub fn register() {
 
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
-                    let mut conn = MySqlConnection::connect("mysql://root:@localhost:3306/music_player").await.unwrap();
+                    let mut conn = MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await.unwrap();
 
                     let usernames: Vec<Username> = match query_as("SELECT username FROM users WHERE username = ?")
                         .bind(login)

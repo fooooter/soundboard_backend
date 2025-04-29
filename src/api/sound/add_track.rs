@@ -21,7 +21,7 @@ pub fn add_track() {
 
     match REQUEST_DATA {
         Post { data: Some(FormData(data)), .. } => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/music_player").await {
+            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
                 Ok(c) => c,
                 Err(e) => {
                     return Some(Vec::from(json!({
