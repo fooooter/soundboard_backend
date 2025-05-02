@@ -1,3 +1,4 @@
+use std::env;
 use drain_common::RequestData::Get;
 use drain_common::sessions::Session;
 use drain_macros::{drain_endpoint, set_header, start_session};
@@ -25,7 +26,7 @@ pub fn list_tracks() {
 
     match REQUEST_DATA {
         Get(_) => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
+            let mut conn = match MySqlConnection::connect(&*env::var("MYSQL_CONN").unwrap()).await {
                 Ok(c) => c,
                 Err(e) => {
                     return Some(Vec::from(json!({

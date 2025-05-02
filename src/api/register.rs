@@ -1,3 +1,4 @@
+use std::env;
 use serde_json::json;
 use drain_common::RequestBody::XWWWFormUrlEncoded;
 use drain_common::RequestData::*;
@@ -18,7 +19,20 @@ pub fn register() {
 
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
-                    let mut conn = MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await.unwrap();
+                    let Ok(conn_string) = env::var("MYSQL_CONN") else {
+                        return Some(Vec::from(json!({
+                            "error": "\"MYSQL_CONN\" environment variable not found."
+                        }).to_string()));
+                    };
+
+                    let mut conn = match MySqlConnection::connect(&*conn_string).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            return Some(Vec::from(json!({
+                                "error": e.to_string()
+                            }).to_string()));
+                        }
+                    };
 
                     let usernames: Vec<Username> = match query_as("SELECT username FROM users WHERE username = ?")
                         .bind(login)

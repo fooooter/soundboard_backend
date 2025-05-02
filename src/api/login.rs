@@ -1,5 +1,6 @@
 use serde_json::json;
 use sqlx::{query_as, Error, MySqlConnection, Connection};
+use std::env;
 use openssl::hash::{MessageDigest, hash};
 use drain_common::RequestBody::XWWWFormUrlEncoded;
 use drain_common::RequestData::*;
@@ -19,7 +20,20 @@ pub fn login() {
 
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
-                    let mut conn = MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await.unwrap();
+                    let Ok(conn_string) = env::var("MYSQL_CONN") else {
+                        return Some(Vec::from(json!({
+                            "error": "\"MYSQL_CONN\" environment variable not found."
+                        }).to_string()));
+                    };
+
+                    let mut conn = match MySqlConnection::connect(&*conn_string).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            return Some(Vec::from(json!({
+                                "error": e.to_string()
+                            }).to_string()));
+                        }
+                    };
 
                     let password_hash = base64::encode_block(&*hash(MessageDigest::sha256(), password.as_bytes()).unwrap());
 

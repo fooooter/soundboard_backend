@@ -1,3 +1,4 @@
+use std::env;
 use drain_common::RequestData::Get;
 use drain_common::sessions::Session;
 use drain_macros::{drain_endpoint, set_header, start_session};
@@ -19,10 +20,15 @@ pub fn remove_track() {
 
     match REQUEST_DATA {
         Get(Some(data)) => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
+            let Ok(conn_string) = env::var("MYSQL_CONN") else {
+                return Some(Vec::from(json!({
+                    "error": "\"MYSQL_CONN\" environment variable not found."
+                }).to_string()));
+            };
+
+            let mut conn = match MySqlConnection::connect(&*conn_string).await {
                 Ok(c) => c,
                 Err(e) => {
-                    set_header!("Content-Type", "application/json");
                     return Some(Vec::from(json!({
                         "error": e.to_string()
                     }).to_string()));
@@ -54,7 +60,13 @@ pub fn remove_track() {
                 }).to_string()));
             };
 
-            if let Err(e) = remove_file(filename.filename).await {
+            let Ok(sound_dir) = env::var("SOUND_DIR") else {
+                return Some(Vec::from(json!({
+                    "error": "\"SOUND_DIR\" environment variable not found."
+                }).to_string()))
+            };
+
+            if let Err(e) = remove_file(format!("{sound_dir}/{}/{}", user_id.id, filename.filename)).await {
                 set_header!("Content-Type", "application/json");
                 return Some(Vec::from(json!({
                     "error": e.to_string()

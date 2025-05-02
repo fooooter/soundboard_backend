@@ -1,3 +1,4 @@
+use std::{env, fs};
 use crate::api::UserSession;
 use drain_common::sessions::Session;
 use drain_common::RequestData::Post;
@@ -21,7 +22,13 @@ pub fn add_track() {
 
     match REQUEST_DATA {
         Post { data: Some(FormData(data)), .. } => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
+            let Ok(conn_string) = env::var("MYSQL_CONN") else {
+                return Some(Vec::from(json!({
+                    "error": "\"MYSQL_CONN\" environment variable not found."
+                }).to_string()));
+            };
+
+            let mut conn = match MySqlConnection::connect(&*conn_string).await {
                 Ok(c) => c,
                 Err(e) => {
                     return Some(Vec::from(json!({
@@ -53,7 +60,30 @@ pub fn add_track() {
                 filename = String::from(f.1);
             }
 
-            let mut file = match File::create(&filename).await {
+            let Ok(sound_dir) = env::var("SOUND_DIR") else {
+                return Some(Vec::from(json!({
+                    "error": "\"SOUND_DIR\" environment variable not found."
+                }).to_string()))
+            };
+
+            match fs::exists(format!("{sound_dir}/{}", user_id.id)) {
+                Ok(exists) => {
+                    if !exists {
+                        if let Err(e) = fs::create_dir(format!("{sound_dir}/{}", user_id.id)) {
+                            return Some(Vec::from(json!({
+                                "error": e.to_string()
+                            }).to_string()));
+                        }
+                    }
+                },
+                Err(e) => {
+                    return Some(Vec::from(json!({
+                        "error": e.to_string()
+                    }).to_string()));
+                }
+            }
+
+            let mut file = match File::create(format!("{sound_dir}/{}/{}", user_id.id, &filename)).await {
                 Ok(f) => f,
                 Err(e) => {
                     return Some(Vec::from(json!({

@@ -1,3 +1,4 @@
+use std::env;
 use crate::api::{UserSession, Filename};
 use drain_common::sessions::Session;
 use drain_common::RequestData::Get;
@@ -20,7 +21,13 @@ pub fn get_track() {
 
     match REQUEST_DATA {
         Get(Some(data)) => {
-            let mut conn = match MySqlConnection::connect("mysql://root:@localhost:3306/soundboard" /* example connection string */).await {
+            let Ok(conn_string) = env::var("MYSQL_CONN") else {
+                return Some(Vec::from(json!({
+                    "error": "\"MYSQL_CONN\" environment variable not found."
+                }).to_string()));
+            };
+
+            let mut conn = match MySqlConnection::connect(&*conn_string).await {
                 Ok(c) => c,
                 Err(e) => {
                     return Some(Vec::from(json!({
@@ -52,7 +59,13 @@ pub fn get_track() {
                 }).to_string()));
             };
 
-            let Ok(mut file) = File::open(filename.filename).await else {
+            let Ok(sound_dir) = env::var("SOUND_DIR") else {
+                return Some(Vec::from(json!({
+                    "error": "\"SOUND_DIR\" environment variable not found."
+                }).to_string()))
+            };
+
+            let Ok(mut file) = File::open(format!("{sound_dir}/{}/{}", user_id.id, filename.filename)).await else {
                 return Some(Vec::from(json!({
                     "error": "Content not found."
                 }).to_string()));
