@@ -1,12 +1,11 @@
 use std::env;
-use serde_json::json;
 use drain_common::RequestBody::XWWWFormUrlEncoded;
 use drain_common::RequestData::*;
 use drain_macros::*;
 use openssl::base64;
 use openssl::hash::{hash, MessageDigest};
 use sqlx::{query, query_as, Connection, MySqlConnection};
-use crate::api::Username;
+use crate::api::{error, Username};
 
 #[drain_endpoint("api/register")]
 pub fn register() {
@@ -20,17 +19,13 @@ pub fn register() {
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
                     let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                        return Some(Vec::from(json!({
-                            "error": "\"MYSQL_CONN\" environment variable not found."
-                        }).to_string()));
+                        return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
                     };
 
                     let mut conn = match MySqlConnection::connect(&*conn_string).await {
                         Ok(c) => c,
                         Err(e) => {
-                            return Some(Vec::from(json!({
-                                "error": e.to_string()
-                            }).to_string()));
+                            return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                         }
                     };
 
@@ -40,9 +35,7 @@ pub fn register() {
                         .await {
                         Ok(t) => t,
                         Err(e) => {
-                            return Some(Vec::from(json!({
-                                "error": e.to_string()
-                            }).to_string()));
+                            return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                         }
                     };
 
@@ -51,9 +44,7 @@ pub fn register() {
                     };
 
                     if usernames.contains(&username) {
-                        return Some(Vec::from(json!({
-                            "error": "The username you've provided already exists."
-                        }).to_string()));
+                        return error("The username you've provided already exists.", HTTP_STATUS_CODE, 200);
                     }
 
                     let password_hash = base64::encode_block(&*hash(MessageDigest::sha256(), password.as_bytes()).unwrap());
@@ -63,24 +54,18 @@ pub fn register() {
                         .bind(password_hash)
                         .execute(&mut conn)
                         .await {
-                        return Some(Vec::from(json!({
-                            "error": e.to_string()
-                        }).to_string()));
+                        return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                     }
 
                     return None;
                 },
                 _ => {
-                    return Some(Vec::from(json!({
-                        "error": "Login and password have to be present."
-                    }).to_string()));
+                    return error("Login and password have to be present.", HTTP_STATUS_CODE, 400);
                 }
             }
         },
         _ => {
-            return Some(Vec::from(json!({
-                "error": "This endpoint only accepts POST requests."
-            }).to_string()));
+            return error("This endpoint only accepts POST requests.", HTTP_STATUS_CODE, 400);
         }
     }
 }

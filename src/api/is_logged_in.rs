@@ -2,7 +2,7 @@ use drain_macros::*;
 use drain_common::sessions::Session;
 use drain_common::RequestData::Get;
 use serde_json::json;
-use crate::api::UserSession;
+use crate::api::{error, UserSession};
 
 #[drain_endpoint("api/is_logged_in")]
 pub fn is_logged_in() {
@@ -20,9 +20,7 @@ pub fn is_logged_in() {
             }).to_string()))
         },
         _ => {
-            return Some(Vec::from(json!({
-                "error": "This endpoint only accepts GET requests."
-            }).to_string()));
+            return error("This endpoint only accepts GET requests.", HTTP_STATUS_CODE, 400);
         }
     }
 }

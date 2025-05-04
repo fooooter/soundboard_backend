@@ -1,12 +1,11 @@
 use std::env;
-use crate::api::{UserSession, Filename};
+use crate::api::{UserSession, Filename, error};
 use drain_common::sessions::Session;
 use drain_common::RequestData::Get;
 use drain_macros::{drain_endpoint, set_header, start_session};
 use sqlx::{query_as, MySqlConnection, Connection};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use serde_json::json;
 
 #[drain_endpoint("api/sound/get_track")]
 pub fn get_track() {
@@ -14,32 +13,24 @@ pub fn get_track() {
     let session: Session = start_session!().await;
 
     let Some(mut user_id) = session.get::<UserSession>(&String::from("userId")).await else {
-        return Some(Vec::from(json!({
-            "error": "Please log in to use this endpoint."
-        }).to_string()));
+        return error("Please log in to use this endpoint.", HTTP_STATUS_CODE, 401);
     };
 
     match REQUEST_DATA {
         Get(Some(data)) => {
             let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                return Some(Vec::from(json!({
-                    "error": "\"MYSQL_CONN\" environment variable not found."
-                }).to_string()));
+                return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
             };
 
             let mut conn = match MySqlConnection::connect(&*conn_string).await {
                 Ok(c) => c,
                 Err(e) => {
-                    return Some(Vec::from(json!({
-                        "error": e.to_string()
-                    }).to_string()));
+                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                 }
             };
 
             let Some(track_id) = data.get("id") else {
-                return Some(Vec::from(json!({
-                    "error": "Request does not contain a track ID parameter."
-                }).to_string()));
+                return error("Request does not contain a track ID parameter.", HTTP_STATUS_CODE, 400);
             };
 
             let Some(filename): Option<Filename> = (match query_as("SELECT filename FROM sounds WHERE id = ? AND user_id = ?")
@@ -49,42 +40,30 @@ pub fn get_track() {
                 .await {
                 Ok(t) => t,
                 Err(e) => {
-                    return Some(Vec::from(json!({
-                        "error": e.to_string()
-                    }).to_string()));
+                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                 }
             }) else {
-                return Some(Vec::from(json!({
-                    "error": "Content not found."
-                }).to_string()));
+                return error("Content not found.", HTTP_STATUS_CODE, 404);
             };
 
             let Ok(sound_dir) = env::var("SOUND_DIR") else {
-                return Some(Vec::from(json!({
-                    "error": "\"SOUND_DIR\" environment variable not found."
-                }).to_string()))
+                return error("\"SOUND_DIR\" environment variable not found.", HTTP_STATUS_CODE, 500);
             };
 
             let Ok(mut file) = File::open(format!("{sound_dir}/{}/{}", user_id.id, filename.filename)).await else {
-                return Some(Vec::from(json!({
-                    "error": "Content not found."
-                }).to_string()));
+                return error("Content not found.", HTTP_STATUS_CODE, 404);
             };
 
             let mut content = Vec::new();
             if let Err(e) = file.read_to_end(&mut content).await {
-                return Some(Vec::from(json!({
-                    "error": e.to_string()
-                }).to_string()));
+                return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
             }
 
             set_header!("Content-Type", "audio/mpeg");
             return Some(content);
         },
         _ => {
-            return Some(Vec::from(json!({
-                "error": "This endpoint only accepts GET requests containing a track ID parameter."
-            }).to_string()));
+            return error("This endpoint only accepts GET requests containing a track ID parameter.", HTTP_STATUS_CODE, 400);
         }
     }
 }

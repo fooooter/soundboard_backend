@@ -1,4 +1,3 @@
-use serde_json::json;
 use sqlx::{query_as, Error, MySqlConnection, Connection};
 use std::env;
 use openssl::hash::{MessageDigest, hash};
@@ -7,7 +6,7 @@ use drain_common::RequestData::*;
 use drain_common::sessions::Session;
 use drain_macros::*;
 use openssl::base64;
-use crate::api::{UserSession, UserID};
+use crate::api::{UserSession, UserID, error};
 
 #[drain_endpoint("api/login")]
 pub fn login() {
@@ -21,17 +20,13 @@ pub fn login() {
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
                     let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                        return Some(Vec::from(json!({
-                            "error": "\"MYSQL_CONN\" environment variable not found."
-                        }).to_string()));
+                        return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
                     };
 
                     let mut conn = match MySqlConnection::connect(&*conn_string).await {
                         Ok(c) => c,
                         Err(e) => {
-                            return Some(Vec::from(json!({
-                                "error": e.to_string()
-                            }).to_string()));
+                            return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                         }
                     };
 
@@ -46,9 +41,7 @@ pub fn login() {
                     match user {
                         Ok(user) => {
                             let Some(UserID {id}) = user else {
-                                return Some(Vec::from(json!({
-                                    "error": "Invalid credentials."
-                                }).to_string()));
+                                return error("Invalid credentials.", HTTP_STATUS_CODE, 200);
                             };
 
                             let mut session: Session = start_session!().await;
@@ -57,23 +50,17 @@ pub fn login() {
                             return None;
                         },
                         Err(e) => {
-                            return Some(Vec::from(json!({
-                                "error": e.to_string()
-                            }).to_string()));
+                            return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                         }
                     }
                 },
                 _ => {
-                    return Some(Vec::from(json!({
-                        "error": "Login and password have to be present."
-                    }).to_string()));
+                    return error("Login and password have to be present.", HTTP_STATUS_CODE, 400);
                 }
             }
         },
         _ => {
-            return Some(Vec::from(json!({
-                "error": "This endpoint only accepts POST requests."
-            }).to_string()));
+            return error("This endpoint only accepts POST requests.", HTTP_STATUS_CODE, 400);
         }
     }
 }

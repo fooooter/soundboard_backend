@@ -1,5 +1,6 @@
 use drain_macros::SessionValue;
 use drain_common::sessions::SessionValue;
+use serde_json::json;
 use sqlx::FromRow;
 
 mod login;
@@ -27,4 +28,11 @@ struct Username {
 #[derive(FromRow)]
 struct Filename {
     pub filename: String
+}
+
+fn error(e: &str, orig_status: &mut u16, status: u16) -> Option<Vec<u8>> {
+    *orig_status = status;
+    Some(Vec::from(json!({
+        "error": e
+    }).to_string()))
 }

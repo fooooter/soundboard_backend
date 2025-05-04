@@ -3,9 +3,8 @@ use drain_common::RequestData::Get;
 use drain_common::sessions::Session;
 use drain_macros::{drain_endpoint, set_header, start_session};
 use serde::Serialize;
-use serde_json::json;
 use sqlx::{FromRow, query_as, Connection, MySqlConnection};
-use crate::api::UserSession;
+use crate::api::{error, UserSession};
 
 #[derive(FromRow, Serialize)]
 struct Track {
@@ -19,19 +18,19 @@ pub fn list_tracks() {
     let session: Session = start_session!().await;
 
     let Some(mut user_id) = session.get::<UserSession>(&String::from("userId")).await else {
-        return Some(Vec::from(json!({
-            "error": "Please log in to use this endpoint."
-        }).to_string()));
+        return error("Please log in to use this endpoint.", HTTP_STATUS_CODE, 401);
     };
 
     match REQUEST_DATA {
         Get(_) => {
-            let mut conn = match MySqlConnection::connect(&*env::var("MYSQL_CONN").unwrap()).await {
+            let Ok(conn_string) = env::var("MYSQL_CONN") else {
+                return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
+            };
+
+            let mut conn = match MySqlConnection::connect(&*conn_string).await {
                 Ok(c) => c,
                 Err(e) => {
-                    return Some(Vec::from(json!({
-                        "error": e.to_string()
-                    }).to_string()));
+                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                 }
             };
 
@@ -41,9 +40,7 @@ pub fn list_tracks() {
                 .await {
                 Ok(t) => t,
                 Err(e) => {
-                    return Some(Vec::from(json!({
-                        "error": e.to_string()
-                    }).to_string()));
+                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                 }
             };
 
@@ -52,16 +49,12 @@ pub fn list_tracks() {
                     return Some(json);
                 },
                 Err(e) => {
-                    return Some(Vec::from(json!({
-                        "error": e.to_string()
-                    }).to_string()));
+                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                 }
             }
         },
         _ => {
-            return Some(Vec::from(json!({
-                "error": "This endpoint only accepts GET requests."
-            }).to_string()));
+            return error("This endpoint only accepts GET requests.", HTTP_STATUS_CODE, 400);
         }
     }
 }
