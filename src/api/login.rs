@@ -1,5 +1,4 @@
-use sqlx::{query_as, Error, MySqlConnection, Connection};
-use std::env;
+use sqlx::{query_as, Error};
 use openssl::hash::{MessageDigest, hash};
 use drain_common::RequestBody::XWWWFormUrlEncoded;
 use drain_common::RequestData::*;
@@ -7,6 +6,7 @@ use drain_common::sessions::Session;
 use drain_macros::*;
 use openssl::base64;
 use crate::api::{UserSession, UserID, error};
+use crate::connection::get_connection;
 
 #[drain_endpoint("api/login")]
 pub fn login() {
@@ -19,14 +19,10 @@ pub fn login() {
 
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
-                    let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                        return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
-                    };
-
-                    let mut conn = match MySqlConnection::connect(&*conn_string).await {
-                        Ok(c) => c,
+                    let mut conn = match get_connection().await {
+                        Ok(conn) => conn,
                         Err(e) => {
-                            return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                            return error(&*e, HTTP_STATUS_CODE, 500);
                         }
                     };
 
@@ -35,8 +31,12 @@ pub fn login() {
                     let user: Result<Option<UserID>, Error> = query_as("SELECT id FROM users WHERE username = ? AND password = ?")
                         .bind(login)
                         .bind(password_hash)
-                        .fetch_optional(&mut conn)
+                        .fetch_optional(&mut *conn)
                         .await;
+
+                    if let Err(e) = conn.close().await {
+                        return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                    }
 
                     match user {
                         Ok(user) => {
@@ -47,6 +47,7 @@ pub fn login() {
                             let mut session: Session = start_session!().await;
                             session.set(String::from("userId"), Box::new(UserSession { id })).await;
 
+                            *HTTP_STATUS_CODE = 204u16;
                             return None;
                         },
                         Err(e) => {

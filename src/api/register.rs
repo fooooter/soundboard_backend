@@ -1,11 +1,11 @@
-use std::env;
 use drain_common::RequestBody::XWWWFormUrlEncoded;
 use drain_common::RequestData::*;
 use drain_macros::*;
 use openssl::base64;
 use openssl::hash::{hash, MessageDigest};
-use sqlx::{query, query_as, Connection, MySqlConnection};
+use sqlx::{query, query_as};
 use crate::api::{error, Username};
+use crate::connection::get_connection;
 
 #[drain_endpoint("api/register")]
 pub fn register() {
@@ -18,20 +18,16 @@ pub fn register() {
 
             match (login, password) {
                 (Some(login), Some(password)) if !login.is_empty() && !password.is_empty() => {
-                    let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                        return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
-                    };
-
-                    let mut conn = match MySqlConnection::connect(&*conn_string).await {
-                        Ok(c) => c,
+                    let mut conn = match get_connection().await {
+                        Ok(conn) => conn,
                         Err(e) => {
-                            return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                            return error(&*e, HTTP_STATUS_CODE, 500);
                         }
                     };
 
                     let usernames: Vec<Username> = match query_as("SELECT username FROM users WHERE username = ?")
                         .bind(login)
-                        .fetch_all(&mut conn)
+                        .fetch_all(&mut *conn)
                         .await {
                         Ok(t) => t,
                         Err(e) => {
@@ -52,11 +48,16 @@ pub fn register() {
                     if let Err(e) = query("INSERT INTO users (username, password) VALUES (?, ?)")
                         .bind(login)
                         .bind(password_hash)
-                        .execute(&mut conn)
+                        .execute(&mut *conn)
                         .await {
                         return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
                     }
 
+                    if let Err(e) = conn.close().await {
+                        return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                    }
+
+                    *HTTP_STATUS_CODE = 204u16;
                     return None;
                 },
                 _ => {

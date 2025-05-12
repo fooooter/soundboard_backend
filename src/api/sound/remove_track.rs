@@ -2,9 +2,10 @@ use std::env;
 use drain_common::RequestData::Get;
 use drain_common::sessions::Session;
 use drain_macros::{drain_endpoint, set_header, start_session};
-use sqlx::{query, query_as, MySqlConnection, Connection};
+use sqlx::{query, query_as};
 use tokio::fs::remove_file;
 use crate::api::{UserSession, Filename, error};
+use crate::connection::get_connection;
 
 #[drain_endpoint("api/sound/remove_track")]
 pub fn remove_track() {
@@ -17,16 +18,10 @@ pub fn remove_track() {
 
     match REQUEST_DATA {
         Get(Some(data)) => {
-            let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                set_header!("Content-Type", "application/json");
-                return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
-            };
-
-            let mut conn = match MySqlConnection::connect(&*conn_string).await {
-                Ok(c) => c,
+            let mut conn = match get_connection().await {
+                Ok(conn) => conn,
                 Err(e) => {
-                    set_header!("Content-Type", "application/json");
-                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                    return error(&*e, HTTP_STATUS_CODE, 500);
                 }
             };
 
@@ -38,7 +33,7 @@ pub fn remove_track() {
             let Some(filename): Option<Filename> = (match query_as("SELECT filename FROM sounds WHERE id = ? AND user_id = ?")
                 .bind(track_id)
                 .bind(user_id.id)
-                .fetch_optional(&mut conn)
+                .fetch_optional(&mut *conn)
                 .await {
                 Ok(t) => t,
                 Err(e) => {
@@ -63,9 +58,13 @@ pub fn remove_track() {
             if let Err(e) = query("DELETE FROM sounds WHERE id = ? AND user_id = ?")
                 .bind(track_id)
                 .bind(user_id.id)
-                .execute(&mut conn)
+                .execute(&mut *conn)
                 .await {
                 set_header!("Content-Type", "application/json");
+                return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+            }
+
+            if let Err(e) = conn.close().await {
                 return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
             }
 

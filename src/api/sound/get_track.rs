@@ -3,9 +3,10 @@ use crate::api::{UserSession, Filename, error};
 use drain_common::sessions::Session;
 use drain_common::RequestData::Get;
 use drain_macros::{drain_endpoint, set_header, start_session};
-use sqlx::{query_as, MySqlConnection, Connection};
+use sqlx::query_as;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+use crate::connection::get_connection;
 
 #[drain_endpoint("api/sound/get_track")]
 pub fn get_track() {
@@ -18,14 +19,10 @@ pub fn get_track() {
 
     match REQUEST_DATA {
         Get(Some(data)) => {
-            let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
-            };
-
-            let mut conn = match MySqlConnection::connect(&*conn_string).await {
-                Ok(c) => c,
+            let mut conn = match get_connection().await {
+                Ok(conn) => conn,
                 Err(e) => {
-                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                    return error(&*e, HTTP_STATUS_CODE, 500);
                 }
             };
 
@@ -36,7 +33,7 @@ pub fn get_track() {
             let Some(filename): Option<Filename> = (match query_as("SELECT filename FROM sounds WHERE id = ? AND user_id = ?")
                 .bind(track_id)
                 .bind(user_id.id)
-                .fetch_optional(&mut conn)
+                .fetch_optional(&mut *conn)
                 .await {
                 Ok(t) => t,
                 Err(e) => {
@@ -45,6 +42,10 @@ pub fn get_track() {
             }) else {
                 return error("Content not found.", HTTP_STATUS_CODE, 404);
             };
+
+            if let Err(e) = conn.close().await {
+                return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+            }
 
             let Ok(sound_dir) = env::var("SOUND_DIR") else {
                 return error("\"SOUND_DIR\" environment variable not found.", HTTP_STATUS_CODE, 500);

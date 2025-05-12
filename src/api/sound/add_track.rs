@@ -4,9 +4,10 @@ use drain_common::sessions::Session;
 use drain_common::RequestData::Post;
 use drain_common::RequestBody::FormData;
 use drain_macros::{drain_endpoint, set_header, start_session};
-use sqlx::{query, MySqlConnection, Connection};
+use sqlx::query;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use crate::connection::get_connection;
 
 #[drain_endpoint("api/sound/add_track")]
 pub fn add_track() {
@@ -19,14 +20,10 @@ pub fn add_track() {
 
     match REQUEST_DATA {
         Post { data: Some(FormData(data)), .. } => {
-            let Ok(conn_string) = env::var("MYSQL_CONN") else {
-                return error("\"MYSQL_CONN\" environment variable not found.", HTTP_STATUS_CODE, 500);
-            };
-
-            let mut conn = match MySqlConnection::connect(&*conn_string).await {
-                Ok(c) => c,
+            let mut conn = match get_connection().await {
+                Ok(conn) => conn,
                 Err(e) => {
-                    return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+                    return error(&*e, HTTP_STATUS_CODE, 500);
                 }
             };
 
@@ -78,11 +75,16 @@ pub fn add_track() {
             if let Err(e) = query("INSERT INTO sounds (filename, user_id) VALUES (?, ?)")
                 .bind(filename)
                 .bind(user_id.id)
-                .execute(&mut conn)
+                .execute(&mut *conn)
                 .await {
                 return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
             }
 
+            if let Err(e) = conn.close().await {
+                return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
+            }
+
+            *HTTP_STATUS_CODE = 204u16;
             return None;
         },
         _ => {
