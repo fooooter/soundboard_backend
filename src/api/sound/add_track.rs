@@ -84,7 +84,6 @@ pub fn add_track() {
                 return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
             }
 
-            *HTTP_STATUS_CODE = 204u16;
             return None;
         },
         _ => {

@@ -10,7 +10,6 @@ pub fn is_logged_in() {
             let session: Session = start_session!().await;
             session.destroy().await;
 
-            *HTTP_STATUS_CODE = 204u16;
             return None;
         },
         _ => {

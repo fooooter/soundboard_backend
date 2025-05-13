@@ -47,7 +47,6 @@ pub fn login() {
                             let mut session: Session = start_session!().await;
                             session.set(String::from("userId"), Box::new(UserSession { id })).await;
 
-                            *HTTP_STATUS_CODE = 204u16;
                             return None;
                         },
                         Err(e) => {
