@@ -21,6 +21,7 @@ pub fn remove_track() {
             let mut conn = match get_connection().await {
                 Ok(conn) => conn,
                 Err(e) => {
+                    set_header!("Content-Type", "application/json");
                     return error(&*e, HTTP_STATUS_CODE, 500);
                 }
             };
@@ -65,6 +66,7 @@ pub fn remove_track() {
             }
 
             if let Err(e) = conn.close().await {
+                set_header!("Content-Type", "application/json");
                 return error(&*e.to_string(), HTTP_STATUS_CODE, 500);
             }
 
